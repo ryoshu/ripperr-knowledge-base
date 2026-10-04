@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 
 CHUNK_WORDS = 350
@@ -15,9 +16,9 @@ CHUNKER_VERSION = "speaker-words-v2-350-35-min20"
 class Chunk:
     chunk_id: str
     ordinal: int
-    start_s: float
-    end_s: float
-    speaker: str
+    start_s: float | None
+    end_s: float | None
+    speaker: str | None
     text: str
 
 
@@ -85,4 +86,38 @@ def chunk_turns(guid: str, revision: int, turns: list[dict]) -> list[Chunk]:
             if offset + CHUNK_WORDS >= len(words):
                 break
             offset += CHUNK_WORDS - OVERLAP_WORDS
+    return chunks
+
+
+def chunk_markdown(source_id: str, revision: int, markdown: str) -> list[Chunk]:
+    """Pack paragraphs into windows of up to CHUNK_WORDS; a longer paragraph is
+    split by words with the same overlap as transcripts. No timings or speaker."""
+    windows: list[list[str]] = []
+    pending: list[str] = []
+    size = 0
+    for paragraph in re.split(r"\n\s*\n", markdown):
+        n = len(paragraph.split())
+        if not n:
+            continue
+        if pending and size + n > CHUNK_WORDS:
+            windows.append(pending)
+            pending, size = [], 0
+        if n > CHUNK_WORDS:
+            words = paragraph.split()
+            for offset in range(0, n, CHUNK_WORDS - OVERLAP_WORDS):
+                windows.append([" ".join(words[offset : offset + CHUNK_WORDS])])
+                if offset + CHUNK_WORDS >= n:
+                    break
+            continue
+        pending.append(paragraph.strip())
+        size += n
+    if pending:
+        windows.append(pending)
+    chunks = []
+    for ordinal, window in enumerate(windows):
+        identity = f"{source_id}\0{revision}\0{ordinal}".encode()
+        chunks.append(Chunk(
+            chunk_id=hashlib.sha256(identity).hexdigest()[:32], ordinal=ordinal,
+            start_s=None, end_s=None, speaker=None, text="\n\n".join(window),
+        ))
     return chunks

@@ -1,4 +1,4 @@
-"""Write user-specific launchd jobs for the Mac Pro indexer and MCP server.
+"""Write user-specific launchd jobs for the Mac Pro indexer, MCP and ingest servers.
 
 Set KB_MCP_ALLOWED_HOSTS (comma-separated, e.g. the `tailscale serve` name)
 when running this; it is written into the MCP job. No secrets go in a plist.
@@ -23,6 +23,7 @@ def main() -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     jobs = {
         "indexer": ("serve-indexer", {}),
+        "ingest": ("serve-ingest", {}),
         "mcp": ("serve-mcp", {"KB_MCP_ALLOWED_HOSTS": os.environ.get("KB_MCP_ALLOWED_HOSTS", "")}),
     }
     for name, (command, env) in jobs.items():

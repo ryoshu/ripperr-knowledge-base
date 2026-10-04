@@ -39,7 +39,7 @@ dependencies; the model is downloaded into the cache on first use.
 
 For the Mac Pro, run `KB_MCP_ALLOWED_HOSTS=<tailscale name> python3 deploy/install_launchd.py`
 inside this checkout, then `launchctl bootstrap gui/$(id -u)` each of
-`~/Library/LaunchAgents/com.ryoshu.ripperr-knowledge-base.{indexer,mcp}.plist`.
+`~/Library/LaunchAgents/com.ryoshu.ripperr-knowledge-base.{indexer,mcp,ingest}.plist`.
 The installer generates user-specific plists without putting secrets in them.
 
 ## MCP server
@@ -120,10 +120,30 @@ regressions on that corpus; add new questions as the collection grows.
 
 Run `uv run pytest` for transactional sync, reset, revision, and retrieval tests.
 
+## Web ingest
+
+`kb serve-ingest` listens on `127.0.0.1:8878` with its own bearer token
+(`~/.config/ripperr-knowledge-base/ingest-token`, separate from the read-only
+MCP token). The crawler on the VPS posts cleaned markdown:
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"url":"https://example.com/post","title":"Post","markdown":"..."}' \
+  https://<tailscale name>:8444/v1/pages    # tailscale serve --bg --https=8444 http://127.0.0.1:8878
+```
+
+The URL is canonicalised (lowercase host, no fragment, tracking parameters or
+trailing slash). The same URL with the same content hash returns `unchanged`
+and only refreshes `fetched_at`; changed content bumps the revision and
+replaces the page's chunks. Pages are indexed as `source_type = web`, with the
+host as the feed, so `kb_search` filters work. The endpoint never fetches
+anything. Pages are chunked by paragraph into windows of up to 350 words.
+A rebuild from ripperr starts a new database, so web pages must be re-posted.
+
 ## Boundaries
 
 This repo provides index sync, search, the MCP server and podcast discovery.
-The web-page ingestion endpoint (W5) comes next. It does not read
+Web pages arrive through the ingest endpoint below. It does not read
 ripperr's SQLite database or import ripperr internals.
 
 `cryptography` is held below 49 because later releases ship no Intel macOS

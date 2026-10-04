@@ -52,6 +52,11 @@ def main(argv: list[str] | None = None) -> int:
     mcp.add_argument("--mcp-token-file", type=Path, default=Path(os.environ.get(
         "KB_MCP_TOKEN_FILE", token_default.with_name("mcp-token")
     )))
+    ingest = sub.add_parser("serve-ingest", help="accept cleaned web pages from the crawler")
+    ingest.add_argument("--port", type=int, default=int(os.environ.get("KB_INGEST_PORT", "8878")))
+    ingest.add_argument("--ingest-token-file", type=Path, default=Path(os.environ.get(
+        "KB_INGEST_TOKEN_FILE", token_default.with_name("ingest-token")
+    )))
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     store = IndexStore(args.db)
@@ -77,6 +82,13 @@ def main(argv: list[str] | None = None) -> int:
             serve(KnowledgeBase(args.db, LocalEmbedder(args.cache)), token,
                   [form for host in hosts for form in (host, f"{host}:*")], args.port,
                   Discovery(RipperrClient(args.api, args.token_file), args.searxng))
+            return 0
+        elif args.command == "serve-ingest":
+            from .ingest import serve
+
+            token = args.ingest_token_file.read_text().strip()
+            store.close()
+            serve(args.db, LocalEmbedder(args.cache), token, args.port)
             return 0
         else:
             client = RipperrClient(args.api, args.token_file)

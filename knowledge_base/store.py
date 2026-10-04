@@ -141,6 +141,54 @@ class IndexStore:
             self.conn.execute("DELETE FROM vec_chunks WHERE rowid=?", (row["id"],))
         self.conn.execute("DELETE FROM documents WHERE doc_id=?", (doc_id,))
 
+    def _insert_chunks(self, doc_id: str, revision: int, chunks: list[Chunk], vectors: list[bytes]) -> None:
+        for chunk, vector in zip(chunks, vectors, strict=True):
+            cursor = self.conn.execute("""
+                INSERT INTO chunks
+                    (chunk_id,doc_id,revision,ordinal,start_s,end_s,speaker,text)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (
+                chunk.chunk_id, doc_id, revision, chunk.ordinal,
+                chunk.start_s, chunk.end_s, chunk.speaker, chunk.text,
+            ))
+            rowid = cursor.lastrowid
+            self.conn.execute(
+                "INSERT INTO chunks_fts(rowid,text,chunk_id) VALUES (?,?,?)",
+                (rowid, chunk.text, chunk.chunk_id),
+            )
+            self.conn.execute(
+                "INSERT INTO vec_chunks(rowid,embedding) VALUES (?,?)", (rowid, vector),
+            )
+
+    def web_document(self, canonical_url: str) -> sqlite3.Row | None:
+        """Revision and content hash (kept in `etag`) of a stored web page."""
+        return self.conn.execute(
+            "SELECT revision,etag FROM documents WHERE doc_id=?", ("web:" + canonical_url,)
+        ).fetchone()
+
+    def touch_page(self, canonical_url: str, fetched_at: str) -> None:
+        with self.conn:
+            self.conn.execute(
+                "UPDATE documents SET fetched_at=? WHERE doc_id=?", (fetched_at, "web:" + canonical_url)
+            )
+
+    def put_page(
+        self, canonical_url: str, title: str | None, published: str | None, fetched_at: str,
+        content_hash: str, revision: int, host: str, chunks: list[Chunk], vectors: list[bytes],
+    ) -> None:
+        """Replace a web page's document and chunks in one transaction."""
+        doc_id = "web:" + canonical_url
+        with self.conn:
+            self._delete_document(doc_id)
+            self.conn.execute("""
+                INSERT INTO documents
+                    (doc_id,source_type,source_id,url,title,published,fetched_at,
+                     revision,feed_id,feed_title,etag,meta_json)
+                VALUES (?,'web',?,?,?,?,?,?,NULL,?,?,?)
+            """, (doc_id, canonical_url, canonical_url, title, published, fetched_at,
+                  revision, host, content_hash, '{"speaker_names":{}}'))
+            self._insert_chunks(doc_id, revision, chunks, vectors)
+
     def apply_event(
         self,
         event: dict,
@@ -204,24 +252,7 @@ class IndexStore:
                     etag, json.dumps(metadata, separators=(",", ":")),
                 ))
                 if chunks is not None:
-                    for chunk, vector in zip(chunks, vectors, strict=True):
-                        cursor = self.conn.execute("""
-                            INSERT INTO chunks
-                                (chunk_id,doc_id,revision,ordinal,start_s,end_s,speaker,text)
-                            VALUES (?,?,?,?,?,?,?,?)
-                        """, (
-                            chunk.chunk_id, doc_id, revision, chunk.ordinal,
-                            chunk.start_s, chunk.end_s, chunk.speaker, chunk.text,
-                        ))
-                        rowid = cursor.lastrowid
-                        self.conn.execute(
-                            "INSERT INTO chunks_fts(rowid,text,chunk_id) VALUES (?,?,?)",
-                            (rowid, chunk.text, chunk.chunk_id),
-                        )
-                        self.conn.execute(
-                            "INSERT INTO vec_chunks(rowid,embedding) VALUES (?,?)",
-                            (rowid, vector),
-                        )
+                    self._insert_chunks(doc_id, revision, chunks, vectors)
                 self.conn.execute("INSERT OR IGNORE INTO reset_seen(guid) VALUES (?)", (guid,))
             self.conn.execute("UPDATE sync_state SET cursor=? WHERE id=1", (sequence,))
 
@@ -263,7 +294,7 @@ class IndexStore:
         return [dict(row) for row in self.conn.execute("""
             SELECT source_type, feed_id, feed_title, count(*) AS documents,
                    min(published) AS earliest, max(published) AS latest
-            FROM documents GROUP BY source_type, feed_id ORDER BY source_type, feed_title
+            FROM documents GROUP BY source_type, feed_id, feed_title ORDER BY source_type, feed_title
         """)]
 
     def search(self, query: str, vector: bytes, k: int = 10) -> list[dict]:
