@@ -188,3 +188,14 @@ def test_short_turns_merge_with_labels():
     assert chunks[0].text == "A: Welcome in! B: Great to be here."
     assert chunks[0].speaker == "A"
     assert len(chunks) == 3 and chunks[1].text.startswith("long")
+
+
+def test_ads_are_flagged_and_hidden_unless_requested(tmp_path):
+    store = IndexStore(tmp_path / "index.db")
+    try:
+        insert(store, 1, episode("abc", 1, "At T -Mobile you can get nothing up front."))
+        vector = pack_vector([0.1] * DIMENSION)
+        assert store.search("T-Mobile", vector) == []
+        assert len(store.search("T-Mobile", vector, include_ads=True)) == 1
+    finally:
+        store.close()
