@@ -59,7 +59,12 @@ class Indexer:
                     guid, existing["etag"] if existing else None
                 )
                 if episode is not None and episode["status"] == "done":
-                    if existing is None or int(episode["revision"]) != existing["revision"]:
+                    rebuilding = cutoff is not None
+                    if (
+                        rebuilding
+                        or existing is None
+                        or int(episode["revision"]) != existing["revision"]
+                    ):
                         chunks = chunk_turns(guid, int(episode["revision"]), episode["turns"])
                         vectors = self.embedder.embed([chunk.text for chunk in chunks])
             self.store.apply_event(event, episode, etag, chunks, vectors)

@@ -66,14 +66,23 @@ class RipperrClient:
         return body
 
     def episode(self, guid: str, etag: str | None = None) -> tuple[dict | None, str | None]:
+        path = "/v2/episodes/" + quote(guid, safe="")
         try:
-            body, new_etag, _ = self._request(
-                "/v1/episodes/" + quote(guid, safe=""), etag=etag
-            )
+            body, new_etag, _ = self._request(path, etag=etag)
             return body, new_etag
         except ApiError as error:
             if error.status == 404:
-                return None, None
+                # An older ripperr server also returns 404 for an unknown v2
+                # route. Detect that before the indexer treats every episode
+                # as deleted during its clean-view bootstrap.
+                legacy_path = "/v1/episodes/" + quote(guid, safe="")
+                try:
+                    self._request(legacy_path)
+                except ApiError as legacy_error:
+                    if legacy_error.status == 404:
+                        return None, None
+                    raise
+                raise ApiError(404, {"error": "HTTP v2 episode details are unavailable"}) from error
             raise
 
     def feeds(self) -> list[dict]:

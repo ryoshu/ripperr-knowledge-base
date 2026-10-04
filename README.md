@@ -1,10 +1,10 @@
 # Ripperr knowledge base
 
 An index of ripperr transcripts, and an MCP server that lets agents search it
-with citations. It consumes only ripperr's documented HTTP change feed. It keeps an
-independent SQLite database on the always-on Mac Pro with FTS5 and sqlite-vec
-indexes over speaker-scoped transcript windows. Ripperr can be offline while
-this database remains searchable.
+with citations. It consumes ripperr's documented HTTP change feed and clean
+episode details from HTTP v2. It keeps an independent SQLite database on the
+always-on Mac Pro with FTS5 and sqlite-vec indexes over speaker-scoped transcript
+windows. Ripperr can be offline while this database remains searchable.
 
 ## Setup
 
@@ -34,8 +34,10 @@ The index defaults to `~/.local/share/ripperr-knowledge-base/index.db`; the loca
 cache defaults to `~/.cache/ripperr-knowledge-base/models`. Embeddings use Model2Vec's
 retrieval-tuned `minishlab/potion-retrieval-32M` (512 dimensions). Its static
 CPU runtime works on the Mac Pro's Intel macOS 12 installation. A model or chunker change requires
-a new index database and bootstrap. The `uv.lock` file pins the runtime
-dependencies; the model is downloaded into the cache on first use.
+a new index database and bootstrap. Moving from HTTP v1 episode details to the
+clean HTTP v2 view triggers a one-time bootstrap that rebuilds podcast
+transcript chunks while preserving web pages. The `uv.lock` file pins the
+runtime dependencies; the model is downloaded into the cache on first use.
 
 For the Mac Pro, run `KB_MCP_ALLOWED_HOSTS=<tailscale name> python3 deploy/install_launchd.py`
 inside this checkout, then `launchctl bootstrap gui/$(id -u)` each of

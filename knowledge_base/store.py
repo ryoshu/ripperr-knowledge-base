@@ -85,6 +85,8 @@ class IndexStore:
             "embedding_dimension": str(DIMENSION),
             "chunker_version": CHUNKER_VERSION,
         }
+        clean_detail_view = "v2"
+        detail_view_changed = False
         with self.conn:
             for key, value in expected.items():
                 existing = self.conn.execute(
@@ -96,6 +98,22 @@ class IndexStore:
                     )
                 self.conn.execute(
                     "INSERT OR IGNORE INTO index_meta(key,value) VALUES (?,?)", (key, value)
+                )
+            existing = self.conn.execute(
+                "SELECT value FROM index_meta WHERE key='episode_detail_api'"
+            ).fetchone()
+            detail_view_changed = existing is None or existing["value"] != clean_detail_view
+            if detail_view_changed:
+                # HTTP v2 omits classified ad turns. Re-bootstrap once so an
+                # existing index does not retain chunks written from HTTP v1.
+                self.conn.execute(
+                    "UPDATE sync_state SET initialized=0, reset_cutoff=NULL WHERE id=1"
+                )
+                self.conn.execute("DELETE FROM reset_seen")
+                self.conn.execute(
+                    "INSERT INTO index_meta(key,value) VALUES ('episode_detail_api',?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (clean_detail_view,),
                 )
 
     def state(self) -> tuple[int, bool, int | None]:
@@ -222,7 +240,7 @@ class IndexStore:
             else:
                 existing = self.document(guid)
                 revision = int(episode["revision"])
-                if existing is None or existing["revision"] != revision:
+                if existing is None or existing["revision"] != revision or chunks is not None:
                     if chunks is None or vectors is None:
                         raise RuntimeError("missing chunks for a new transcript revision")
                     self._delete_document(doc_id)
