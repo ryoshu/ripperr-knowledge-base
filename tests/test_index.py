@@ -176,3 +176,15 @@ def test_pruned_cursor_bootstrap_drops_missing_episode(tmp_path):
         assert store.document("def") is None
     finally:
         store.close()
+
+
+def test_short_turns_merge_with_labels():
+    turns = [
+        {"idx": 0, "speaker": "A", "start": 0, "end": 1, "text": "Welcome in!"},
+        {"idx": 1, "speaker": "B", "start": 1, "end": 2, "text": "Great to be here."},
+        {"idx": 2, "speaker": "A", "start": 2, "end": 40, "text": " ".join(["long"] * 400)},
+    ]
+    chunks = chunk_turns("abc", 1, turns)
+    assert chunks[0].text == "A: Welcome in! B: Great to be here."
+    assert chunks[0].speaker == "A"
+    assert len(chunks) == 3 and chunks[1].text.startswith("long")
