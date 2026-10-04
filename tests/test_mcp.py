@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
@@ -95,3 +96,51 @@ def test_bearer_auth_rejects_missing_or_wrong_token():
     assert asyncio.run(call([(b"authorization", b"Bearer wrong")])) == 401
     assert asyncio.run(call([(b"authorization", b"Bearer secret")])) == 200
     assert reached == ["/mcp"]
+
+
+class FakeRipperr:
+    def __init__(self):
+        self.added = []
+
+    def feeds(self):
+        return [{"id": 1, "url": "https://known.example/rss"}]
+
+    def add_feed(self, url, title=None, backfill=None):
+        self.added.append((url, title, backfill))
+        return {"feed": {"id": 2, "url": url, "title": title}, **({"backfilled": backfill} if backfill else {})}
+
+
+def test_discover_and_subscribe_tools(tmp_path):
+    from test_discover import RSS, fake
+
+    results = {"results": [{"url": "https://known.example/rss", "title": "Known"},
+                           {"url": "https://new.example/rss", "title": "New"}]}
+    get = fake({
+        "https://search/search?q=dynasty&categories=podcasts&format=json": json.dumps(results).encode(),
+        "https://known.example/rss": RSS, "https://new.example/rss": RSS,
+        "https://not-a-feed.example/": b"<html></html>",
+    })
+    ripperr = FakeRipperr()
+    discovery = mcp_server.Discovery(ripperr, "https://search", get)
+
+    found = discovery.discover("dynasty")
+    assert "untrusted" in found["notice"]
+    assert [(c["feed_url"], c["subscribed"]) for c in found["candidates"]] == [
+        ("https://known.example/rss", True), ("https://new.example/rss", False)]
+
+    done = discovery.subscribe("https://new.example/rss", backfill=3)
+    assert ripperr.added == [("https://new.example/rss", "Dynasty Nerds", 3)]
+    assert done["backfilled"] == 3
+    with pytest.raises(ValueError):
+        discovery.subscribe("https://not-a-feed.example/")
+    with pytest.raises(ValueError):
+        discovery.subscribe("https://new.example/rss", backfill=500)
+    assert len(ripperr.added) == 1
+
+
+def test_subscribe_is_the_only_tool_marked_as_a_write(tmp_path):
+    server = mcp_server.build_server(make(tmp_path), mcp_server.Discovery(FakeRipperr(), "https://search"))
+    tools = {t.name: t for t in asyncio.run(server.list_tools())}
+    assert set(tools) == {"kb_search", "kb_get_span", "kb_list_sources", "kb_discover", "kb_subscribe"}
+    assert tools["kb_discover"].annotations.read_only_hint is True
+    assert tools["kb_subscribe"].annotations.read_only_hint is False

@@ -17,6 +17,7 @@ from .sync import Indexer, default_paths
 
 def main(argv: list[str] | None = None) -> int:
     token_default, db_default, cache_default = default_paths()
+    searxng_default = os.environ.get("KB_SEARXNG_URL", "https://search.ryoshu.com")
     parser = argparse.ArgumentParser(description="Index ripperr transcripts over HTTP")
     parser.add_argument("--api", default=os.environ.get(
         "RIPPERR_API_URL", "http://127.0.0.1:8876"
@@ -44,9 +45,10 @@ def main(argv: list[str] | None = None) -> int:
     find.add_argument("--limit", type=int, default=10)
     find.add_argument("--backfill", type=int, default=None,
                       help="also take each chosen feed's N newest episodes (1-100), not just the latest")
-    find.add_argument("--searxng", default=os.environ.get("KB_SEARXNG_URL", "https://search.ryoshu.com"))
+    find.add_argument("--searxng", default=searxng_default)
     mcp = sub.add_parser("serve-mcp", help="serve the MCP retrieval tools over streamable HTTP")
     mcp.add_argument("--port", type=int, default=int(os.environ.get("KB_MCP_PORT", "8877")))
+    mcp.add_argument("--searxng", default=searxng_default)
     mcp.add_argument("--mcp-token-file", type=Path, default=Path(os.environ.get(
         "KB_MCP_TOKEN_FILE", token_default.with_name("mcp-token")
     )))
@@ -65,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
             store.close()
             return discover_command(args)
         elif args.command == "serve-mcp":
-            from .mcp_server import KnowledgeBase, serve
+            from .mcp_server import Discovery, KnowledgeBase, serve
 
             token = args.mcp_token_file.read_text().strip()
             # Hostnames the server is reached by besides localhost, e.g. the
@@ -73,7 +75,8 @@ def main(argv: list[str] | None = None) -> int:
             hosts = [h.strip() for h in os.environ.get("KB_MCP_ALLOWED_HOSTS", "").split(",") if h.strip()]
             store.close()
             serve(KnowledgeBase(args.db, LocalEmbedder(args.cache)), token,
-                  [form for host in hosts for form in (host, f"{host}:*")], args.port)
+                  [form for host in hosts for form in (host, f"{host}:*")], args.port,
+                  Discovery(RipperrClient(args.api, args.token_file), args.searxng))
             return 0
         else:
             client = RipperrClient(args.api, args.token_file)

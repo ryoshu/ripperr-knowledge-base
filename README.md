@@ -44,7 +44,7 @@ The installer generates user-specific plists without putting secrets in them.
 
 ## MCP server
 
-`kb serve-mcp` serves three tools over streamable HTTP (stateless, JSON
+`kb serve-mcp` serves five tools over streamable HTTP (stateless, JSON
 responses) on `127.0.0.1:8877/mcp`:
 
 | Tool | Returns |
@@ -52,11 +52,17 @@ responses) on `127.0.0.1:8877/mcp`:
 | `kb_search(query, k, feed, speaker, source_type, published_after, published_before)` | Up to 20 hybrid-ranked passages |
 | `kb_get_span(guid, start_s, end_s)` | One episode's transcript between two times (at most 15 minutes), without the words split chunks repeat |
 | `kb_list_sources()` | Indexed feeds with document counts and date ranges |
+| `kb_discover(query, limit)` | Podcast feeds on a topic, as `kb discover` lists them; read-only |
+| `kb_subscribe(feed_url, title, backfill)` | Subscribes ripperr to a feed after checking it is one; marked as a write, so clients ask before calling it |
 
 Every passage comes with a citation (title, feed, published date, speaker,
 start and end seconds, `h:mm:ss`, URL with `t=` for YouTube, guid and
 revision), and its text sits in a `quote` field next to a notice that it is
 untrusted source material. Responses carry at most 24,000 characters of quotes.
+Discovery results carry the same kind of notice, and say that subscribing is
+the user's call. Keep `kb_subscribe` out of any client's auto-approve list.
+The server reads the ripperr token from `api-token` for discovery and
+subscribing.
 
 It needs its own bearer token in `~/.config/ripperr-knowledge-base/mcp-token`
 (mode `600`; separate from the ripperr token, so a client cannot write to
