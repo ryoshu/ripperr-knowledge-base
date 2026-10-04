@@ -9,7 +9,7 @@ from pathlib import Path
 
 import sqlite_vec
 
-from .chunking import CHUNKER_VERSION, Chunk
+from .chunking import CHUNKER_VERSION, OVERLAP_WORDS, Chunk
 from .embeddings import DIMENSION, MODEL_NAME
 
 
@@ -232,6 +232,40 @@ class IndexStore:
             "vectors": self.conn.execute("SELECT count(*) FROM vec_chunks").fetchone()[0],
         }
 
+    def span(self, guid: str, start_s: float, end_s: float) -> dict | None:
+        """The podcast episode's chunks overlapping [start_s, end_s], in order,
+        with the words a split long turn repeats removed. None if not indexed."""
+        doc = self.conn.execute(
+            "SELECT * FROM documents WHERE source_type='podcast' AND source_id=?", (guid,)
+        ).fetchone()
+        if doc is None:
+            return None
+        rows = self.conn.execute("""
+            SELECT ordinal,start_s,end_s,speaker,text FROM chunks
+            WHERE doc_id=? AND end_s>=? AND start_s<=? ORDER BY ordinal
+        """, (doc["doc_id"], start_s, end_s)).fetchall()
+        names = json.loads(doc["meta_json"])["speaker_names"]
+        passages: list[dict] = []
+        for row in rows:
+            text = row["text"]
+            previous = passages[-1] if passages else None
+            if (previous and previous["ordinal"] == row["ordinal"] - 1
+                    and previous["speaker"] == row["speaker"] and row["start_s"] < previous["end_s"]):
+                text = " ".join(text.split()[OVERLAP_WORDS:])
+            passages.append({**dict(row), "text": text,
+                             "speaker_name": names.get(row["speaker"], row["speaker"])})
+        document = dict(doc)
+        document.pop("meta_json")
+        return {"document": document, "passages": passages}
+
+    def sources(self) -> list[dict]:
+        """What is indexed, per source type and feed."""
+        return [dict(row) for row in self.conn.execute("""
+            SELECT source_type, feed_id, feed_title, count(*) AS documents,
+                   min(published) AS earliest, max(published) AS latest
+            FROM documents GROUP BY source_type, feed_id ORDER BY source_type, feed_title
+        """)]
+
     def search(self, query: str, vector: bytes, k: int = 10) -> list[dict]:
         if not 1 <= k <= 50:
             raise ValueError("k must be between 1 and 50")
@@ -257,7 +291,7 @@ class IndexStore:
         for rowid in ranked:
             row = self.conn.execute("""
                 SELECT c.chunk_id,c.ordinal,c.start_s,c.end_s,c.speaker,c.text,
-                       d.source_id,d.url,d.title,d.published,d.revision,
+                       d.source_type,d.source_id,d.url,d.title,d.published,d.revision,
                        d.feed_id,d.feed_title,d.meta_json
                 FROM chunks c JOIN documents d ON d.doc_id=c.doc_id WHERE c.id=?
             """, (rowid,)).fetchone()

@@ -1,15 +1,19 @@
-"""Write a user-specific launchd job for the Mac Pro indexer."""
+"""Write user-specific launchd jobs for the Mac Pro indexer and MCP server.
+
+Set KB_MCP_ALLOWED_HOSTS (comma-separated, e.g. the `tailscale serve` name)
+when running this; it is written into the MCP job. No secrets go in a plist.
+"""
 
 from __future__ import annotations
 
+import os
 import plistlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME = Path.home()
-LABEL = "com.ryoshu.ripperr-knowledge-base.indexer"
+PREFIX = "com.ryoshu.ripperr-knowledge-base"
 LOG_DIR = HOME / ".local/state/ripperr-knowledge-base"
-PLIST = HOME / "Library/LaunchAgents" / f"{LABEL}.plist"
 
 
 def main() -> None:
@@ -17,18 +21,27 @@ def main() -> None:
     if not executable.is_file():
         raise SystemExit(f"install dependencies first: {executable} is absent")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
-    PLIST.parent.mkdir(parents=True, exist_ok=True)
-    job = {
-        "Label": LABEL,
-        "ProgramArguments": [str(executable), "serve-indexer"],
-        "WorkingDirectory": str(ROOT),
-        "RunAtLoad": True,
-        "KeepAlive": True,
-        "StandardOutPath": str(LOG_DIR / "indexer.log"),
-        "StandardErrorPath": str(LOG_DIR / "indexer.log"),
+    jobs = {
+        "indexer": ("serve-indexer", {}),
+        "mcp": ("serve-mcp", {"KB_MCP_ALLOWED_HOSTS": os.environ.get("KB_MCP_ALLOWED_HOSTS", "")}),
     }
-    PLIST.write_bytes(plistlib.dumps(job))
-    print(PLIST)
+    for name, (command, env) in jobs.items():
+        label = f"{PREFIX}.{name}"
+        plist = HOME / "Library/LaunchAgents" / f"{label}.plist"
+        plist.parent.mkdir(parents=True, exist_ok=True)
+        job = {
+            "Label": label,
+            "ProgramArguments": [str(executable), command],
+            "WorkingDirectory": str(ROOT),
+            "RunAtLoad": True,
+            "KeepAlive": True,
+            "StandardOutPath": str(LOG_DIR / f"{name}.log"),
+            "StandardErrorPath": str(LOG_DIR / f"{name}.log"),
+        }
+        if env:
+            job["EnvironmentVariables"] = env
+        plist.write_bytes(plistlib.dumps(job))
+        print(plist)
 
 
 if __name__ == "__main__":

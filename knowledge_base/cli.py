@@ -39,6 +39,11 @@ def main(argv: list[str] | None = None) -> int:
     query.add_argument("-k", type=int, default=10)
     evaluation = sub.add_parser("eval", help="measure passage retrieval on labeled questions")
     evaluation.add_argument("cases", type=Path)
+    mcp = sub.add_parser("serve-mcp", help="serve the MCP retrieval tools over streamable HTTP")
+    mcp.add_argument("--port", type=int, default=int(os.environ.get("KB_MCP_PORT", "8877")))
+    mcp.add_argument("--mcp-token-file", type=Path, default=Path(os.environ.get(
+        "KB_MCP_TOKEN_FILE", token_default.with_name("mcp-token")
+    )))
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     store = IndexStore(args.db)
@@ -50,6 +55,17 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(store.search(args.query, vector, args.k), indent=2))
         elif args.command == "eval":
             print(json.dumps(evaluate(store, LocalEmbedder(args.cache), args.cases), indent=2))
+        elif args.command == "serve-mcp":
+            from .mcp_server import KnowledgeBase, serve
+
+            token = args.mcp_token_file.read_text().strip()
+            # Hostnames the server is reached by besides localhost, e.g. the
+            # `tailscale serve` name; both the bare and host:port forms are allowed.
+            hosts = [h.strip() for h in os.environ.get("KB_MCP_ALLOWED_HOSTS", "").split(",") if h.strip()]
+            store.close()
+            serve(KnowledgeBase(args.db, LocalEmbedder(args.cache)), token,
+                  [form for host in hosts for form in (host, f"{host}:*")], args.port)
+            return 0
         else:
             client = RipperrClient(args.api, args.token_file)
             indexer = Indexer(store, client, LocalEmbedder(args.cache))

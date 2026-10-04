@@ -1,6 +1,7 @@
-# Ripperr knowledge base indexer
+# Ripperr knowledge base
 
-This service consumes only ripperr's documented HTTP change feed. It keeps an
+An index of ripperr transcripts, and an MCP server that lets agents search it
+with citations. It consumes only ripperr's documented HTTP change feed. It keeps an
 independent SQLite database on the always-on Mac Pro with FTS5 and sqlite-vec
 indexes over speaker-scoped transcript windows. Ripperr can be offline while
 this database remains searchable.
@@ -18,14 +19,15 @@ uv run kb status
 uv run kb search 'What was the J.K. Dobbins paradox?' -k 5
 uv run kb eval eval/podcast_questions.jsonl
 uv run kb serve-indexer
+uv run kb serve-mcp             # MCP tools on 127.0.0.1:8877/mcp
 ```
 
 The initial sync calls ripperr's bootstrap endpoint once. The cursor and every
 document, FTS row, and vector row covered by an event commit together. A
 pruned cursor triggers a new bootstrap; the old podcast documents are pruned
 only after its full event range has been replayed. A failed request or model
-run leaves the last committed cursor intact. The continuous worker backs off
-when the laptop is asleep and keeps its existing index available.
+run leaves the last committed cursor intact. The continuous indexer backs off
+when ripperr is unreachable and keeps its existing index available.
 
 The index defaults to `~/.local/share/ripperr-knowledge-base/index.db`; the local CPU model
 cache defaults to `~/.cache/ripperr-knowledge-base/models`. Embeddings use Model2Vec's
@@ -34,9 +36,39 @@ CPU runtime works on the Mac Pro's Intel macOS 12 installation. A model or chunk
 a new index database and bootstrap. The `uv.lock` file pins the runtime
 dependencies; the model is downloaded into the cache on first use.
 
-For the Mac Pro, run `python3 deploy/install_launchd.py` inside this checkout,
-then `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ryoshu.ripperr-knowledge-base.indexer.plist`.
-The installer generates a user-specific plist without putting secrets in it.
+For the Mac Pro, run `KB_MCP_ALLOWED_HOSTS=<tailscale name> python3 deploy/install_launchd.py`
+inside this checkout, then `launchctl bootstrap gui/$(id -u)` each of
+`~/Library/LaunchAgents/com.ryoshu.ripperr-knowledge-base.{indexer,mcp}.plist`.
+The installer generates user-specific plists without putting secrets in them.
+
+## MCP server
+
+`kb serve-mcp` serves three tools over streamable HTTP (stateless, JSON
+responses) on `127.0.0.1:8877/mcp`:
+
+| Tool | Returns |
+| --- | --- |
+| `kb_search(query, k, feed, speaker, source_type, published_after, published_before)` | Up to 20 hybrid-ranked passages |
+| `kb_get_span(guid, start_s, end_s)` | One episode's transcript between two times (at most 15 minutes), without the words split chunks repeat |
+| `kb_list_sources()` | Indexed feeds with document counts and date ranges |
+
+Every passage comes with a citation (title, feed, published date, speaker,
+start and end seconds, `h:mm:ss`, URL with `t=` for YouTube, guid and
+revision), and its text sits in a `quote` field next to a notice that it is
+untrusted source material. Responses carry at most 24,000 characters of quotes.
+
+It needs its own bearer token in `~/.config/ripperr-knowledge-base/mcp-token`
+(mode `600`; separate from the ripperr token, so a client cannot write to
+ripperr). On the Mac Pro it is exposed on the tailnet with
+`tailscale serve --bg --https=8443 http://127.0.0.1:8877`; set
+`KB_MCP_ALLOWED_HOSTS` to that hostname so DNS-rebinding protection accepts it.
+Register it in Claude Code with:
+
+```sh
+claude mcp add --scope user --transport http knowledge-base \
+  https://rickys-mac-pro.taile4827e.ts.net:8443/mcp \
+  --header "Authorization: Bearer $(ssh hastur@rickys-mac-pro cat .config/ripperr-knowledge-base/mcp-token)"
+```
 
 ## Evaluation
 
@@ -50,6 +82,9 @@ Run `uv run pytest` for transactional sync, reset, revision, and retrieval tests
 
 ## Boundaries
 
-This repo currently provides local index sync and search. MCP transport and
-the web-page ingestion endpoint are the next work items. It does not read
+This repo provides index sync, search and the MCP server. Podcast discovery
+(W4) and the web-page ingestion endpoint (W5) come next. It does not read
 ripperr's SQLite database or import ripperr internals.
+
+`cryptography` is held below 49 because later releases ship no Intel macOS
+wheel. The Mac Pro has no uv; install from `uv export --frozen` output with pip.
