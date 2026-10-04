@@ -8,7 +8,7 @@ import logging
 import os
 from pathlib import Path
 
-from .client import RipperrClient
+from .client import ApiError, RipperrClient
 from .embeddings import LocalEmbedder
 from .evaluate import evaluate
 from .store import IndexStore
@@ -39,6 +39,12 @@ def main(argv: list[str] | None = None) -> int:
     query.add_argument("-k", type=int, default=10)
     evaluation = sub.add_parser("eval", help="measure passage retrieval on labeled questions")
     evaluation.add_argument("cases", type=Path)
+    find = sub.add_parser("discover", help="find podcast feeds with SearXNG and subscribe ripperr to chosen ones")
+    find.add_argument("query")
+    find.add_argument("--limit", type=int, default=10)
+    find.add_argument("--backfill", type=int, default=None,
+                      help="also take each chosen feed's N newest episodes (1-100), not just the latest")
+    find.add_argument("--searxng", default=os.environ.get("KB_SEARXNG_URL", "https://search.ryoshu.com"))
     mcp = sub.add_parser("serve-mcp", help="serve the MCP retrieval tools over streamable HTTP")
     mcp.add_argument("--port", type=int, default=int(os.environ.get("KB_MCP_PORT", "8877")))
     mcp.add_argument("--mcp-token-file", type=Path, default=Path(os.environ.get(
@@ -55,6 +61,9 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(store.search(args.query, vector, args.k), indent=2))
         elif args.command == "eval":
             print(json.dumps(evaluate(store, LocalEmbedder(args.cache), args.cases), indent=2))
+        elif args.command == "discover":
+            store.close()
+            return discover_command(args)
         elif args.command == "serve-mcp":
             from .mcp_server import KnowledgeBase, serve
 
@@ -76,6 +85,54 @@ def main(argv: list[str] | None = None) -> int:
                 indexer.run_forever()
     finally:
         store.close()
+    return 0
+
+
+def discover_command(args) -> int:
+    import sys
+
+    from .discover import discover, parse_choice
+
+    client = RipperrClient(args.api, args.token_file)
+    subscribed = [feed["url"] for feed in client.feeds()]
+    candidates = discover(args.searxng, args.query, subscribed, args.limit)
+    if not candidates:
+        print("no podcast results")
+        return 0
+    for number, c in enumerate(candidates, 1):
+        mark = "  [subscribed]" if c.subscribed else ""
+        print(f"{number:>2}. {c.title}{mark}")
+        if c.error:
+            print(f"    ! {c.error}  ({c.source_url})")
+            continue
+        print(f"    {c.feed_url}")
+        latest = " · ".join(x for x in (c.latest_published, c.latest_title) if x)
+        print(f"    {c.about}" + (f"  —  newest: {latest}" if latest else ""))
+    choosable = [i for i, c in enumerate(candidates) if c.feed_url and not c.subscribed]
+    if not choosable or not sys.stdin.isatty():
+        return 0  # subscribing always needs a person at the prompt
+    while True:
+        answer = input("\nSubscribe to which? Numbers, comma-separated; blank for none: ").strip()
+        try:
+            picks = parse_choice(answer, len(candidates))
+        except ValueError as error:
+            print(f"  {error}")
+            continue
+        if any(i not in choosable for i in picks):
+            print("  pick only feeds that resolved and are not already subscribed")
+            continue
+        break
+    for i in picks:
+        c = candidates[i]
+        try:
+            result = client.add_feed(c.feed_url, c.title, args.backfill)
+        except ApiError as error:
+            print(f"  ! {c.title}: {error}")
+            continue
+        extra = f", {result['backfilled']} episode(s) recorded" if "backfilled" in result else ""
+        print(f"  subscribed: {c.title} (feed {result['feed']['id']}{extra})")
+    if picks:
+        print("ripperr prepares new episodes on its next hourly run; a worker transcribes them after that.")
     return 0
 
 

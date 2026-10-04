@@ -20,6 +20,7 @@ uv run kb search 'What was the J.K. Dobbins paradox?' -k 5
 uv run kb eval eval/podcast_questions.jsonl
 uv run kb serve-indexer
 uv run kb serve-mcp             # MCP tools on 127.0.0.1:8877/mcp
+uv run kb discover 'dynasty fantasy football' --backfill 5
 ```
 
 The initial sync calls ripperr's bootstrap endpoint once. The cursor and every
@@ -70,6 +71,25 @@ claude mcp add --scope user --transport http knowledge-base \
   --header "Authorization: Bearer $(ssh hastur@rickys-mac-pro cat .config/ripperr-knowledge-base/mcp-token)"
 ```
 
+## Discovery
+
+`kb discover QUERY` searches SearXNG's `podcasts` category
+(`KB_SEARXNG_URL`, default `https://search.ryoshu.com`), resolves each result
+to an RSS feed, and lists it with SearXNG's episode count and the feed's
+newest episode. A result resolves if it is a feed itself (Podchaser returns
+feed URLs), an Apple Podcasts link (via the iTunes lookup API), or a page with a
+`<link rel="alternate">` feed. Feeds ripperr already follows are marked.
+
+At a terminal it then asks which to subscribe to and calls ripperr's
+`POST /v1/feeds`, with `--backfill N` to take each feed's N newest episodes
+(1 to 100) instead of only the latest. Without a terminal it only lists:
+nothing subscribes without a person choosing. Requests are sequential and read
+at most 512 KB of each feed. Ripperr prepares new episodes on its next hourly
+run, a worker transcribes them, and the indexer picks them up.
+
+Podchaser matches titles and descriptions, so topic queries work better than
+host names.
+
 ## Deploying to the Mac Pro
 
 Develop on the laptop and push to GitHub. The Mac Pro checkout
@@ -96,8 +116,8 @@ Run `uv run pytest` for transactional sync, reset, revision, and retrieval tests
 
 ## Boundaries
 
-This repo provides index sync, search and the MCP server. Podcast discovery
-(W4) and the web-page ingestion endpoint (W5) come next. It does not read
+This repo provides index sync, search, the MCP server and podcast discovery.
+The web-page ingestion endpoint (W5) comes next. It does not read
 ripperr's SQLite database or import ripperr internals.
 
 `cryptography` is held below 49 because later releases ship no Intel macOS

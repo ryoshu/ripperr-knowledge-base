@@ -26,7 +26,7 @@ class RipperrClient:
         self.timeout = timeout
 
     def _request(
-        self, path: str, *, method: str = "GET", etag: str | None = None
+        self, path: str, *, method: str = "GET", etag: str | None = None, body: dict | None = None
     ) -> tuple[dict | None, str | None, int]:
         token = self.token_file.read_text().strip()
         if not token:
@@ -34,9 +34,11 @@ class RipperrClient:
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
         if etag:
             headers["If-None-Match"] = etag
+        if body is not None:
+            headers["Content-Type"] = "application/json"
         request = Request(
             self.base_url + path,
-            data=b"" if method == "POST" else None,
+            data=json.dumps(body).encode() if body is not None else b"" if method == "POST" else None,
             headers=headers,
             method=method,
         )
@@ -73,3 +75,20 @@ class RipperrClient:
             if error.status == 404:
                 return None, None
             raise
+
+    def feeds(self) -> list[dict]:
+        body, _, _ = self._request("/v1/feeds")
+        assert body is not None
+        return body["feeds"]
+
+    def add_feed(self, url: str, title: str | None = None, backfill: int | None = None) -> dict:
+        """Subscribe ripperr to a feed (idempotent). `backfill` also records the
+        feed's N newest episodes instead of only the latest."""
+        payload: dict = {"url": url}
+        if title:
+            payload["title"] = title
+        if backfill:
+            payload["backfill"] = backfill
+        body, _, _ = self._request("/v1/feeds", method="POST", body=payload)
+        assert body is not None
+        return body
