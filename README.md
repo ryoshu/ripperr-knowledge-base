@@ -137,7 +137,7 @@ trailing slash). The same URL with the same content hash returns `unchanged`
 and only refreshes `fetched_at`; changed content bumps the revision and
 replaces the page's chunks. Pages are indexed as `source_type = web`, with the
 host as the feed, so `kb_search` filters work. The endpoint never fetches
-anything. Pages are chunked by paragraph into windows of up to 350 words.
+anything. `scripts/crawl_push.py` runs on the VPS in its `~/crawl4ai-env`: it crawls URLs one at a time with Crawl4AI and posts them (`~/crawl4ai-env/bin/python ~/ripperr-crawl/crawl_push.py URL ...`). The VPS cannot resolve `.ts.net` names, so it connects by the Mac Pro's tailnet IP. Pages are chunked by paragraph into windows of up to 350 words.
 A rebuild from ripperr starts a new database, so web pages must be re-posted.
 
 ## Boundaries
