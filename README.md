@@ -70,6 +70,20 @@ claude mcp add --scope user --transport http knowledge-base \
   --header "Authorization: Bearer $(ssh hastur@rickys-mac-pro cat .config/ripperr-knowledge-base/mcp-token)"
 ```
 
+## Deploying to the Mac Pro
+
+Develop on the laptop and push to GitHub. The Mac Pro checkout
+(`~/ripperr-knowledge-base`) has no GitHub credentials; it accepts pushes
+directly (`receive.denyCurrentBranch=updateInstead`), so deploy with:
+
+```sh
+git push origin main && git push macpro main      # macpro = hastur@rickys-mac-pro:ripperr-knowledge-base
+ssh hastur@rickys-mac-pro 'launchctl kickstart -k gui/$(id -u)/com.ryoshu.ripperr-knowledge-base.mcp'
+```
+
+When dependencies change, install the `uv export --frozen --no-hashes` output
+there with `.venv/bin/pip install -r`, then `pip install --no-deps -e .`.
+
 ## Evaluation
 
 `eval/podcast_questions.jsonl` contains 22 questions tied to real transcript
