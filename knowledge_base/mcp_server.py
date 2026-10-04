@@ -173,6 +173,9 @@ class Discovery:
         }
 
 
+READ_ONLY = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+
+
 def build_server(kb: KnowledgeBase, discovery: Discovery | None = None) -> MCPServer:
     server = MCPServer(
         name="knowledge-base",
@@ -183,7 +186,7 @@ def build_server(kb: KnowledgeBase, discovery: Discovery | None = None) -> MCPSe
         ),
     )
 
-    @server.tool(name="kb_search")
+    @server.tool(name="kb_search", annotations=READ_ONLY)
     def kb_search(
         query: str,
         k: int = 8,
@@ -201,13 +204,13 @@ def build_server(kb: KnowledgeBase, discovery: Discovery | None = None) -> MCPSe
         """
         return kb.search(query, k, feed, speaker, source_type, published_after, published_before)
 
-    @server.tool(name="kb_get_span")
+    @server.tool(name="kb_get_span", annotations=READ_ONLY)
     def kb_get_span(guid: str, start_s: float, end_s: float) -> dict[str, Any]:
         """Transcript text of one episode between two times in seconds (at most 15 minutes),
         for context around a search result. `guid` comes from a result's citation."""
         return kb.get_span(guid, start_s, end_s)
 
-    @server.tool(name="kb_list_sources")
+    @server.tool(name="kb_list_sources", annotations=READ_ONLY)
     def kb_list_sources() -> dict[str, Any]:
         """Which feeds and source types are indexed, with document counts and date ranges."""
         return kb.list_sources()

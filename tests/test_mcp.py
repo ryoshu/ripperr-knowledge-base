@@ -142,5 +142,5 @@ def test_subscribe_is_the_only_tool_marked_as_a_write(tmp_path):
     server = mcp_server.build_server(make(tmp_path), mcp_server.Discovery(FakeRipperr(), "https://search"))
     tools = {t.name: t for t in asyncio.run(server.list_tools())}
     assert set(tools) == {"kb_search", "kb_get_span", "kb_list_sources", "kb_discover", "kb_subscribe"}
-    assert tools["kb_discover"].annotations.read_only_hint is True
+    assert all(tools[name].annotations.read_only_hint for name in set(tools) - {"kb_subscribe"})
     assert tools["kb_subscribe"].annotations.read_only_hint is False
