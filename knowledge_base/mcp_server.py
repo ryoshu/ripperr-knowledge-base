@@ -87,7 +87,6 @@ class KnowledgeBase:
         source_type: str | None = None,
         published_after: str | None = None,
         published_before: str | None = None,
-        include_ads: bool = False,
     ) -> dict[str, Any]:
         if not query.strip():
             raise ValueError("query is required")
@@ -95,7 +94,7 @@ class KnowledgeBase:
         vector = self.embedder.embed([query])[0]
         store = self._store()
         try:
-            rows = store.search(query, vector, SEARCH_POOL, include_ads)
+            rows = store.search(query, vector, SEARCH_POOL)
         finally:
             store.close()
 
@@ -196,16 +195,14 @@ def build_server(kb: KnowledgeBase, discovery: Discovery | None = None) -> MCPSe
         source_type: str | None = None,
         published_after: str | None = None,
         published_before: str | None = None,
-        include_ads: bool = False,
     ) -> dict[str, Any]:
         """Hybrid keyword and semantic search. Returns up to k (max 20) cited passages.
 
         Filters: `feed` and `speaker` match case-insensitive substrings of the feed
         title and speaker name; `source_type` is "podcast" (later also "web");
-        dates are ISO 8601 prefixes such as "2026-09-01". Passages that look like ad reads are
-        left out unless `include_ads` is true.
+        dates are ISO 8601 prefixes such as "2026-09-01".
         """
-        return kb.search(query, k, feed, speaker, source_type, published_after, published_before, include_ads)
+        return kb.search(query, k, feed, speaker, source_type, published_after, published_before)
 
     @server.tool(name="kb_get_span", annotations=READ_ONLY)
     def kb_get_span(guid: str, start_s: float, end_s: float) -> dict[str, Any]:

@@ -3,19 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-import re
 from dataclasses import dataclass
 
 CHUNK_WORDS = 350
 OVERLAP_WORDS = 35
 MIN_WORDS = 20
-CHUNKER_VERSION = "speaker-words-v3-350-35-min20-ads"
-# Loose on purpose: a hit only hides the chunk from default search, it deletes nothing.
-# Transcripts spell it "T -Mobile". Add sponsors as they turn up.
-AD_PATTERN = re.compile(
-    r"\bt\s?-\s?mobile\b|mucinex|prize\s?picks|sponsored by|promo(?:tional)? code|use code|pass it on",
-    re.IGNORECASE,
-)
+CHUNKER_VERSION = "speaker-words-v2-350-35-min20"
 
 
 @dataclass(frozen=True)
@@ -26,7 +19,6 @@ class Chunk:
     end_s: float
     speaker: str
     text: str
-    is_ad: bool = False
 
 
 def chunk_turns(guid: str, revision: int, turns: list[dict]) -> list[Chunk]:
@@ -76,7 +68,6 @@ def chunk_turns(guid: str, revision: int, turns: list[dict]) -> list[Chunk]:
             end_s=window[-1][2],
             speaker=speaker,
             text=text,
-            is_ad=bool(AD_PATTERN.search(text)),
         ))
 
     for run in packed:

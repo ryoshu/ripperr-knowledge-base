@@ -72,8 +72,7 @@ class IndexStore:
                 start_s REAL,
                 end_s REAL,
                 speaker TEXT,
-                text TEXT NOT NULL,
-                is_ad INTEGER NOT NULL DEFAULT 0
+                text TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS chunks_doc ON chunks(doc_id, ordinal);
             CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts
@@ -208,11 +207,11 @@ class IndexStore:
                     for chunk, vector in zip(chunks, vectors, strict=True):
                         cursor = self.conn.execute("""
                             INSERT INTO chunks
-                                (chunk_id,doc_id,revision,ordinal,start_s,end_s,speaker,text,is_ad)
-                            VALUES (?,?,?,?,?,?,?,?,?)
+                                (chunk_id,doc_id,revision,ordinal,start_s,end_s,speaker,text)
+                            VALUES (?,?,?,?,?,?,?,?)
                         """, (
                             chunk.chunk_id, doc_id, revision, chunk.ordinal,
-                            chunk.start_s, chunk.end_s, chunk.speaker, chunk.text, chunk.is_ad,
+                            chunk.start_s, chunk.end_s, chunk.speaker, chunk.text,
                         ))
                         rowid = cursor.lastrowid
                         self.conn.execute(
@@ -267,9 +266,7 @@ class IndexStore:
             FROM documents GROUP BY source_type, feed_id ORDER BY source_type, feed_title
         """)]
 
-    def search(
-        self, query: str, vector: bytes, k: int = 10, include_ads: bool = False
-    ) -> list[dict]:
+    def search(self, query: str, vector: bytes, k: int = 10) -> list[dict]:
         if not 1 <= k <= 50:
             raise ValueError("k must be between 1 and 50")
         pool = min(200, max(k * 5, 30))
@@ -289,22 +286,20 @@ class IndexStore:
         for ids in (keyword_ids, vector_ids):
             for rank, rowid in enumerate(ids, 1):
                 scores[rowid] = scores.get(rowid, 0.0) + 1.0 / (60 + rank)
-        ranked = sorted(scores, key=lambda rowid: (-scores[rowid], rowid))
+        ranked = sorted(scores, key=lambda rowid: (-scores[rowid], rowid))[:k]
         results = []
         for rowid in ranked:
             row = self.conn.execute("""
-                SELECT c.chunk_id,c.ordinal,c.start_s,c.end_s,c.speaker,c.text,c.is_ad,
+                SELECT c.chunk_id,c.ordinal,c.start_s,c.end_s,c.speaker,c.text,
                        d.source_type,d.source_id,d.url,d.title,d.published,d.revision,
                        d.feed_id,d.feed_title,d.meta_json
                 FROM chunks c JOIN documents d ON d.doc_id=c.doc_id WHERE c.id=?
             """, (rowid,)).fetchone()
-            if row is None or (row["is_ad"] and not include_ads):
+            if row is None:
                 continue
             item = dict(row)
             names = json.loads(item.pop("meta_json"))["speaker_names"]
             item["speaker_name"] = names.get(item["speaker"], item["speaker"])
             item["score"] = scores[rowid]
             results.append(item)
-            if len(results) == k:
-                break
         return results
