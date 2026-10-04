@@ -9,7 +9,7 @@ this database remains searchable.
 
 Install a Python 3.11 runtime and run `uv sync --locked --python 3.11`. Put the
 ripperr bearer token in `~/.config/ripperr-kb/api-token` with mode `600`. The
-default ripperr URL is `https://nyarlathotep.taile4827e.ts.net`; override it
+default ripperr URL is `http://127.0.0.1:8876` (ripperr runs on this host); override it
 with `RIPPERR_API_URL` when deploying elsewhere. No token is stored in the repo.
 
 ```sh

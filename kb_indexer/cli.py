@@ -19,7 +19,7 @@ def main(argv: list[str] | None = None) -> int:
     token_default, db_default, cache_default = default_paths()
     parser = argparse.ArgumentParser(description="Index ripperr transcripts over HTTP")
     parser.add_argument("--api", default=os.environ.get(
-        "RIPPERR_API_URL", "https://nyarlathotep.taile4827e.ts.net"
+        "RIPPERR_API_URL", "http://127.0.0.1:8876"
     ))
     parser.add_argument("--token-file", type=Path, default=Path(os.environ.get(
         "RIPPERR_TOKEN_FILE", token_default
