@@ -96,7 +96,7 @@ class Indexer:
 def default_paths() -> tuple[Path, Path, Path]:
     home = Path.home()
     return (
-        home / ".config/ripperr-kb/api-token",
-        home / ".local/share/ripperr-kb/index.db",
-        home / ".cache/ripperr-kb/models",
+        home / ".config/ripperr-knowledge-base/api-token",
+        home / ".local/share/ripperr-knowledge-base/index.db",
+        home / ".cache/ripperr-knowledge-base/models",
     )

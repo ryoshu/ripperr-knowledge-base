@@ -442,7 +442,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ripperr-kb"
+name = "ripperr-knowledge-base"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

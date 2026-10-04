@@ -7,13 +7,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME = Path.home()
-LABEL = "com.ryoshu.ripperr-kb.indexer"
-LOG_DIR = HOME / ".local/state/ripperr-kb"
+LABEL = "com.ryoshu.ripperr-knowledge-base.indexer"
+LOG_DIR = HOME / ".local/state/ripperr-knowledge-base"
 PLIST = HOME / "Library/LaunchAgents" / f"{LABEL}.plist"
 
 
 def main() -> None:
-    executable = ROOT / ".venv/bin/kb-index"
+    executable = ROOT / ".venv/bin/kb"
     if not executable.is_file():
         raise SystemExit(f"install dependencies first: {executable} is absent")
     LOG_DIR.mkdir(parents=True, exist_ok=True)

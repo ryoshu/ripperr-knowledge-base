@@ -8,16 +8,16 @@ this database remains searchable.
 ## Setup
 
 Install a Python 3.11 runtime and run `uv sync --locked --python 3.11`. Put the
-ripperr bearer token in `~/.config/ripperr-kb/api-token` with mode `600`. The
+ripperr bearer token in `~/.config/ripperr-knowledge-base/api-token` with mode `600`. The
 default ripperr URL is `http://127.0.0.1:8876` (ripperr runs on this host); override it
 with `RIPPERR_API_URL` when deploying elsewhere. No token is stored in the repo.
 
 ```sh
-uv run kb-index sync
-uv run kb-index status
-uv run kb-index search 'What was the J.K. Dobbins paradox?' -k 5
-uv run kb-index eval eval/podcast_questions.jsonl
-uv run kb-index serve-indexer
+uv run kb sync
+uv run kb status
+uv run kb search 'What was the J.K. Dobbins paradox?' -k 5
+uv run kb eval eval/podcast_questions.jsonl
+uv run kb serve-indexer
 ```
 
 The initial sync calls ripperr's bootstrap endpoint once. The cursor and every
@@ -27,21 +27,21 @@ only after its full event range has been replayed. A failed request or model
 run leaves the last committed cursor intact. The continuous worker backs off
 when the laptop is asleep and keeps its existing index available.
 
-The index defaults to `~/.local/share/ripperr-kb/index.db`; the local CPU model
-cache defaults to `~/.cache/ripperr-kb/models`. Embeddings use Model2Vec's
+The index defaults to `~/.local/share/ripperr-knowledge-base/index.db`; the local CPU model
+cache defaults to `~/.cache/ripperr-knowledge-base/models`. Embeddings use Model2Vec's
 retrieval-tuned `minishlab/potion-retrieval-32M` (512 dimensions). Its static
 CPU runtime works on the Mac Pro's Intel macOS 12 installation. A model or chunker change requires
 a new index database and bootstrap. The `uv.lock` file pins the runtime
 dependencies; the model is downloaded into the cache on first use.
 
 For the Mac Pro, run `python3 deploy/install_launchd.py` inside this checkout,
-then `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ryoshu.ripperr-kb.indexer.plist`.
+then `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ryoshu.ripperr-knowledge-base.indexer.plist`.
 The installer generates a user-specific plist without putting secrets in it.
 
 ## Evaluation
 
 `eval/podcast_questions.jsonl` contains 22 questions tied to real transcript
-passages, with episode GUIDs and approximate timestamps. `kb-index eval`
+passages, with episode GUIDs and approximate timestamps. `kb eval`
 reports passage hit rate at ranks 5 and 10 plus mean rank among hits. The
 questions were chosen from the initial ripperr corpus, so the baseline measures
 regressions on that corpus; add new questions as the collection grows.

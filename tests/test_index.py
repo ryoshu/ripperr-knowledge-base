@@ -4,11 +4,11 @@ import sqlite3
 
 import pytest
 
-from kb_indexer.chunking import chunk_turns
-from kb_indexer.client import ApiError
-from kb_indexer.embeddings import DIMENSION, pack_vector
-from kb_indexer.store import IndexStore
-from kb_indexer.sync import Indexer
+from knowledge_base.chunking import chunk_turns
+from knowledge_base.client import ApiError
+from knowledge_base.embeddings import DIMENSION, pack_vector
+from knowledge_base.store import IndexStore
+from knowledge_base.sync import Indexer
 
 
 def episode(guid: str, revision: int, text: str, name: str = "Host") -> dict:
