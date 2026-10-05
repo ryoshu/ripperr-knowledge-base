@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import time
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
@@ -40,7 +41,7 @@ def allowed(url: str, domains: list[str]) -> bool:
 
 def find_urls(
     searxng_url: str, names: list[str], domains: list[str], store: IndexStore,
-    per_player: int = 5, get: Fetch = fetch, pause: float = 3,
+    per_player: int = 5, get: Fetch = fetch, pause: float = 10,
 ) -> list[str]:
     """New allowlisted news URLs from the last week, at most `per_player` per name and search."""
     urls: list[str] = []
@@ -55,8 +56,11 @@ def find_urls(
             time.sleep(pause)  # SearXNG's upstream engines suspend us when queried quickly
             query = urlencode({"q": q, "categories": category, "time_range": "week", "format": "json"})
             body, _ = get(searxng_url.rstrip("/") + "/search?" + query)
+            found = json.loads(body)
+            if not found.get("results") and found.get("unresponsive_engines"):
+                print(f"{name}: no results; engines failing: {found['unresponsive_engines']}", file=sys.stderr)
             taken = 0
-            for result in json.loads(body).get("results", []):
+            for result in found.get("results", []):
                 if taken >= per_player:
                     break
                 try:
