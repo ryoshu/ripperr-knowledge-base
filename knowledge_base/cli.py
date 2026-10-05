@@ -46,6 +46,14 @@ def main(argv: list[str] | None = None) -> int:
     find.add_argument("--backfill", type=int, default=None,
                       help="also take each chosen feed's N newest episodes (1-100), not just the latest")
     find.add_argument("--searxng", default=searxng_default)
+    news = sub.add_parser("news", help="find and crawl recent news for player names read from stdin")
+    news.add_argument("--domains", type=Path, default=Path(os.environ.get(
+        "KB_NEWS_DOMAINS", token_default.with_name("news-domains.txt")
+    )), help="allowlist file, one domain per line")
+    news.add_argument("--per-player", type=int, default=5)
+    news.add_argument("--ssh-host", default=os.environ.get("KB_CRAWL_SSH", "ricky@vps-anodyne"))
+    news.add_argument("--dry-run", action="store_true", help="print the URLs instead of crawling")
+    news.add_argument("--searxng", default=searxng_default)
     mcp = sub.add_parser("serve-mcp", help="serve the MCP retrieval tools over streamable HTTP")
     mcp.add_argument("--port", type=int, default=int(os.environ.get("KB_MCP_PORT", "8877")))
     mcp.add_argument("--searxng", default=searxng_default)
@@ -71,6 +79,8 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "discover":
             store.close()
             return discover_command(args)
+        elif args.command == "news":
+            return news_command(args, store)
         elif args.command == "serve-mcp":
             from .mcp_server import Discovery, KnowledgeBase, serve
 
@@ -101,6 +111,19 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         store.close()
     return 0
+
+
+def news_command(args, store) -> int:
+    import sys
+
+    from .news import crawl, find_urls, load_domains
+
+    names = [line.strip() for line in sys.stdin if line.strip()]
+    urls = find_urls(args.searxng, names, load_domains(args.domains), store, args.per_player)
+    print("\n".join(urls))
+    if args.dry_run or not urls:
+        return 0
+    return 1 if crawl(args.ssh_host, urls) else 0
 
 
 def discover_command(args) -> int:

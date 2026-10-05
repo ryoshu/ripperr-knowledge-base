@@ -79,6 +79,17 @@ claude mcp add --scope user --transport http knowledge-base \
   --header "Authorization: Bearer $(ssh hastur@rickys-mac-pro cat .config/ripperr-knowledge-base/mcp-token)"
 ```
 
+## News
+
+`kb news` reads player names (one per line) on stdin, searches SearXNG's `news`
+category for each over the last week, keeps results from domains listed in
+`KB_NEWS_DOMAINS` (default `news-domains.txt` beside the tokens; one domain per
+line, `#` comments), drops pages already indexed, and runs the VPS crawler over
+the rest via `ssh $KB_CRAWL_SSH` (default `ricky@vps-anodyne`). `--per-player N` caps
+URLs per name (default 5); `--dry-run` only prints them. A page is usable from
+the time the ingest endpoint received it, never earlier. Pages the crawler
+cannot fetch (sites needing the residential proxy) fail and are reported.
+
 ## Discovery
 
 `kb discover QUERY` searches SearXNG's `podcasts` category
